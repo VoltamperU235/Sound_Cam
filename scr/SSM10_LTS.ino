@@ -91,11 +91,14 @@ void setup() {
   dht.begin();                                         //Comando para inicializar el sensor DTH11
   pinMode(MIC_INTERRUPT, INPUT);                       //Inicializamos el pin DO del modulo microfono como entrada digital
   pinMode(MIC, OUTPUT);                                //Inicializamos el pin elevador de tension para el microfono ambiental como salida digital
+  pinMode(SIM_RST, OUTPUT);                            //Inicializamos el pin del SIM_RST como salida digital
   digitalWrite(MIC, LOW);                              //Colocamos el pin del elevador de tension para el microfono ambiental en estado bajo (APAGADO)
   pinMode(NO_CONECTION_LED, OUTPUT);                   //El LED permanecera encendido mientras carga el setup y detecta conexion;
   digitalWrite(NO_CONECTION_LED, HIGH);
   mySerial.println(F("10LTS"));                        //Mostramos la version de firmware (por motivos de desarrollo)
   mySerial.println(F("1"));                            //Mensajes para determinar correcto funcionamiento en el PC
+  SIM_RESET();                                     //Reiniciamos el SIM800L
+  delay(555);                                          //Esperamos para que se vuelva a activar.
   sendData("AT", 111, 1);                              //Enviamos en comando "AT" para verificar el correcto funcionamiento del SIM800 (o para salir del SLEEP automatico si estaba activado)
   sendData(CSCLK0, 1111, 1);                           //Desactivamos el SLEEP automatico y continuamos con el programa.
   sendData("ATH", 1111, 1);                            //Por motivos de seguridad (Pasa cuando hay poca carga en la bateria) se corta la llamada en proceso (si existiera).
@@ -271,8 +274,9 @@ void loop() {
       if (SENDER)                                                  //Si SENDER == true entonces que envie el mensaje al numero de telefono auxiliar
       {
         Serial.println("AT+CMGS=\"" + TELEPHONE + "\"");           //Este comando es utilizado para determinar el destinatario del mensaje
-        ESTADO += 1;                                               //Pasamos al siguiente estado de los mensajes. :v
       }
+      ESTADO += 1;                                               //Pasamos al siguiente estado de los mensajes. :v
+
       break;
     case 13:
       Smart_Delay(111);                                            //Esperamos para darle tiempo al SIM800 para procesar los comandos correctamente
@@ -374,7 +378,7 @@ void loop() {
 //  Funcion parecida a delay() pero no para la ejecucion del sketch, siempre esta atento a datos provenientes del UART0. (Funciona unicamente con maquinas de estados finitos :'v ).
 //
 
-void Smart_Delay(long duration) {                                             
+void Smart_Delay(long duration) {
   if (LOCK_MILLIS) {                                                          //Verificamos si es momento de tomar un punto de referencia para medir el trancurso del tiempo
     MILLIS_NOW = millis();                                                    //Si es momento, entonces verificamos el momento actual
     LOCK_MILLIS = LOW;                                                        //y bloquemos la toma de un nuevo punto de referencia
@@ -391,7 +395,7 @@ void Smart_Delay(long duration) {
 // Funcion que permite realizar una toma de muestras de sonido y analizarlas  ************************************************************************************************************************************************************************************************************************************************************************************************
 //
 
-void DETECTION() {                                                           
+void DETECTION() {
   if (ESTADO == SLEEP_LONG || ESTADO == NOISE || ESTADO == QUICK_SLEEP) {     //Solo si la maquina de estados finitos se encuentra en alguno de estos estados
     ESTADO = NOISE;                                                           //Vamos al Estado Noise para analizar los pulsos (No se hace directamente aca porque al ser una interrupcion eso retrasaria cualquier proceso que se este realizando (Como recibir datos por el UART)).
     PULSES++;
@@ -403,7 +407,7 @@ void DETECTION() {
 //  Funcion que permite enviar comandos AT y esperar su respuesta por determinado tiempo (si Debug esta en HIGH)  *************************************************************************************************************************************************************************************************************************************************************************************************
 //
 
-String sendData(String command, const int timeout, boolean debug) {     
+String sendData(String command, const int timeout, boolean debug) {
   String response = "";                                                 //Variable que contendra las respuestas del SIM800
   Serial.println(command);                                              //Mostramos en la PC el comando que enviamos.
   long int time = millis();                                             //Tomamos el valor acutal de millis();
@@ -425,9 +429,9 @@ String sendData(String command, const int timeout, boolean debug) {
 //
 
 void JSON() {
-  StaticJsonBuffer<115> jsonBuffer;                           
+  StaticJsonBuffer<115> jsonBuffer;
   JsonObject& root = jsonBuffer.createObject();               //Se crea un Objeto del tipo JsomObjet para ingresar los datos.
-                                                              //Añadimos los valores de los sensores a nuestro JSON.
+  //Añadimos los valores de los sensores a nuestro JSON.
   root["I"] = IMEI;                                           //Ingresamos el imei del SIM800
   root["D"] = STRING_HORA_SIM800;                             //Ingresamos la hora del SIM800
   root["T"] = TEMP;                                           //Ingresamos la temperatura registrada del DTH11
@@ -443,7 +447,7 @@ void JSON() {
 //
 
 void SIM_SCAN() {
-  while (Serial.available()) {                          
+  while (Serial.available()) {
     C = Serial.read();                                  //Lo almacenamos en nuestra variable C.
 
     ALARM_FLAG[3] = C;                                  //Generamos un array de 4 caracteres que almacenara y correra los datos que ingresen
@@ -476,7 +480,7 @@ void DTH()
     return;
   }
   float hic = dht.computeHeatIndex(t, h, false);      //Calculamos el indice de calor
-  HUMITY = int(h);                                    //Asignamos a nuestra variable global HUMITY el valor leido 
+  HUMITY = int(h);                                    //Asignamos a nuestra variable global HUMITY el valor leido
   TEMP = int(t);                                      //Asignamos a nuestra variable global TEMP el valor leido
 }
 
@@ -484,7 +488,7 @@ void DTH()
 //****************************************************  software_Reset  ***********************************************************************************************************************************************************************************************************************************************************************************************
 // Restarts program from beginning but does not reset the peripherals and registers  *********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************
 //
-  
+
 void software_Reset() {
   asm volatile ("  jmp 0");                          //Funcion ensablador que sirve para "reiniciar" el microcontrolador
 }
@@ -499,4 +503,16 @@ void alarm_reset()
   mySerial.println(UART_SCAN);                       //Imprimimos la String que activo el software_Reset
   mySerial.flush();                                  //vaciamos la cola de bytes.
   software_Reset() ;                                 //Reiniciamos el dispositivo.
+}
+
+//*********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************
+//*****************************************************  sin_reset  *************************************************************************************************************************************************************************************************************************************************************************************************
+//  Funcion que sirve para reiniciar por hawdware el SIM800  *********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************
+//
+
+void SIM_RESET()
+{
+  digitalWrite(SIM_RST, LOW);                         //Reiniciamos colocando el pin RST del SIM800 en 0
+  delay(555);                                         //esperamos para un buen reinicio XD
+  digitalWrite(SIM_RST, HIGH);                        //Volvemos a activar el modulo.
 }

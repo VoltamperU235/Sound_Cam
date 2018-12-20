@@ -22,5 +22,7 @@
 #define ACTIVE_LED 6                                  //Definimos el pin que nos mostrara en una LED que el sistema esta busy.
 #define LOW_POWER_LED 5                               //Definimos el pin que nos mostrara en una LED que el sistema entro en modo power-save.
 #define MIC_INTERRUPT 2                               //Definimos el pin que estara conectado a la salida digital del microfono.
+#define SIM_RST 10                               //Definimos el pin que estara conectado a la salida digital del microfono.
 
-String TELEPHONE = "50257276772";                     //Definimos el numero de telefono auxiliar al cual se estaran enviando los datos
+
+const String TELEPHONE = "50257276772";                     //Definimos el numero de telefono auxiliar al cual se estaran enviando los datos
